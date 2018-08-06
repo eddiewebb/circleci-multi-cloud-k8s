@@ -1,0 +1,177 @@
+workflows:
+  version: 2
+  build-deploy:
+    jobs:
+      - unit-test
+      - package-docker:
+          requires:
+            - unit-test
+          filters:
+            branches:
+              only: master
+      - deploy-docker:
+          requires:
+            - package-docker
+          filters:
+            branches:
+              only: master
+      - hold:
+          type: approval
+          requires:
+            - dark-deploy
+            - test-ie
+            - test-chrome
+          filters:
+            branches:
+              only: master
+      - live-deploy:
+          requires:
+            - hold
+          filters:
+            branches:
+              only: master
+
+
+
+
+version: 2
+jobs:
+  unit-test:
+    docker:
+      - image: circleci/openjdk:8-jdk
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - blueskygreenbuilds-mvn-V2-{{ checksum "pom.xml" }}
+            - blueskygreenbuilds-mvn-V2
+
+      - run: mvn dependency:go-offline
+      - run:
+          name: Build and *unit* test
+          command: |
+            mvn test -B  #run your tests
+
+
+      - save_cache:
+          paths:
+            - ~/.m2
+          key: blueskygreenbuilds-mvn-V2-{{ checksum "pom.xml" }}
+
+      - store_test_results:
+          path: target/surefire-reports
+
+
+
+
+  package-docker:
+    docker:
+      - image: circleci/openjdk:8-jdk-browsers
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - blueskygreenbuilds-mvn-V2-{{ checksum "pom.xml" }}
+            - blueskygreenbuilds-mvn-V2
+      - run: mvn dependency:go-offline
+      - run: cp .mvn/wrapper/settings.xml ~/.m2/settings.xml
+      - run: echo "<settingsSecurity><master>${maven_security_master}</master></settingsSecurity>" > ~/.m2/settings-security.xml
+      - setup_remote_docker
+      - run:
+          name: Publish Docker image with Jib
+          command: |
+            ./mvnw compile jib:build -B -DskipTests=true \
+              -Dbuild.number=${CIRCLE_BUILD_NUM} \
+              -Dcommit.hash=${CIRCLE_SHA1} \
+              -Dcircle.workflow=${CIRCLE_WORKFLOW_ID} \
+              -Dbuild.user=${CIRCLE_PROJECT_USERNAME} \
+              -Dbuild.repo=${CIRCLE_PROJECT_REPONAME} 
+      - run:
+          name: Preserve Docker IMage tag 
+          command: |
+            MVN_VERSION=$(./mvnw -q -Dexec.executable="echo" -Dexec.args='${project.version}' --non-recursive org.codehaus.mojo:exec-maven-plugin:1.3.1:exec)
+            echo "export DOCKER_IMAGE=eddiewebb/blueskygreenbuilds-demo:${MVN_VERSION}-b${CIRCLE_BUILD_NUM}" > /tmp/docker_image
+      - persist_to_workspace:
+          root: /tmp
+          paths:
+            - docker_image
+
+
+  deploy-docker:
+    docker:
+      - image: circleci/openjdk:8-jdk-browsers
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - attach_workspace: 
+          at: /tmp
+      - run: 
+          name: Install gcloud SDK
+          command: |
+            # Create environment variable for correct distribution
+            export CLOUD_SDK_REPO="cloud-sdk-$(lsb_release -c -s)"
+            # Add the Cloud SDK distribution URI as a package source
+            echo "deb http://packages.cloud.google.com/apt $CLOUD_SDK_REPO main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+            # Import the Google Cloud Platform public key
+            curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+            # Update the package list and install the Cloud SDK
+            sudo apt-get update -y && sudo apt-get install -y google-cloud-sdk kubectl
+      - run: 
+          name: Initialize & Authenticate gcloud SDK
+          command: |
+            while read LINE; do eval echo $LINE; done < .circleci/gcp_key.json > /tmp/gcp_key.json
+            #gcloud init --console-only
+            gcloud auth activate-service-account --key-file /tmp/gcp_key.json
+            gcloud config set project research-180616
+            gcloud config set compute/zone us-central1-a
+            gcloud container clusters get-credentials blueskygreenbuilds
+            source /tmp/docker_image
+            echo "Deploying IMage: ${DOCKER_IMAGE}"
+            kubectl run blueskygreenbuilds --image=hub.docker.com/r/${DOCKER_IMAGE} --port 8080 || (echo "Falling back to image update" && kubectl set image deployment/blueskygreenbuilds blueskygreenbuilds=${DOCKER_IMAGE})
+            kubectl rollout status deployment/blueskygreenbuilds
+            kubectl expose deployment blueskygreenbuilds --type=LoadBalancer --port 80 --target-port 8080 || echo "Service already exposed"
+            kubectl get service
+      - run:
+          name: Smoke Test Docker Deploy
+          command: |
+            DOCKER_IP=$(kubectl get service | grep blueskygreenbuilds | tr -s " " | cut -d" " -f 4)
+            echo "Testing against IP: ${DOCKER_IP}"
+            sleep 10
+            HTTPCODE=`curl -s -m 5 -o /dev/null -w "%{http_code}" http://${DOCKER_IP}/`
+            if [ "$HTTPCODE" -ne 200 ];then
+              echo "dark route note available, failing deploy"
+              exit 1
+            fi
+
+
+  live-deploy:
+    docker:
+      - image: circleci/openjdk:8-jdk
+    working_directory: ~/deploy
+    steps:
+      # why rebuild something we already tested, rebuilding invalidates any previous confidence?!
+      - attach_workspace:
+          at: /tmp
+
+      - run:
+          name: Re-route live Domain to latest
+          command: |
+            # Verify new version is working on dark URL.
+            HTTPCODE=`curl -s -o /dev/null -w "%{http_code}" http://dark.blueskygreenbuilds.com/`
+            if [ "$HTTPCODE" -ne 200 ];then
+              echo "dark route note available, failing deploy"
+              exit 1
+            fi
+            # Send "real" url to new version
+            cf map-route blueskygreenbuilds-dark blueskygreenbuilds.com -n www
+            sleep 15  # give time to demo round robin
+            # Stop sending traffic to previous version
+            cf unmap-route blueskygreenbuilds blueskygreenbuilds.com -n www
+            # stop previous version
+            cf stop blueskygreenbuilds
+            # delete previous version
+            cf delete blueskygreenbuilds -f
+            # Switch name of "dark" version to claim correct name
+            cf rename blueskygreenbuilds-dark blueskygreenbuilds
