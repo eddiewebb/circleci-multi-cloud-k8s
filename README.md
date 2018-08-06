@@ -1,29 +1,33 @@
-# Circle CI Demo
+# Circle CI Kubernetes Demo
 
-Build, Test and Deploy a simple webapp using CircleCI, Saucelabs and Cloud Foundry.
+Build, Test and Deploy a simple webapp using CircleCI, Docker, Kubernetes and CloudFlare.  
+
+This project repo is the source code companion a series of CircleCI Blog posts. [ADDRESS]
 
 
 ##  Testing
-To test simple UI functionality we're using Spring Boot's test starter and SauceLabs Connect Tunnel binaries driven through Selenium's `WebDriver` interface.  The use of SauceLabs let's us run several browser combinations in parallel.
+To test simple UI functionality we're using Spring Boot's test starter and Selenium's `WebDriver` interface.  
 
-You can see these simple tests in [HomePagesTests.java](src/test/java/com/edwardawebb/circleci/demo/it/HomePageIT.java)
+## Containerizing
+To turn our executable jar into a Docker image we're using Jib, a project from Google.
 
-## Deploying on Cloud Foundry
-One of my favorite features of CF is the **zero-downtime** deployments using [Blue/Green strategy](https://martinfowler.com/bliki/BlueGreenDeployment.html).
+## Deploying
+Locking into a single cloud provider can reduce initial investment, but may limit future portability.  This demo targets k8s on a few major providers
 
-1. Push new version of app on a 'dark' URL not used by customers
-1. Validate application health on dark URL
-1. Begin routing customer facing URL to new version
-1. Stop sending customer traffic to old version
-1. Stop and remove previous version
+###  GCP (Google Cloud)
+We'll install gcloud cli and kubectl to manage our interations with Google's cluster orschestration.
+
+### AWS ECS (Amazon Container Service)
 
 
-![CloudFoundry panel showing blue and green version on unique routes](src/main/resources/static/images/bluegreen.png)
+## DNS Management
+It's easy to use static IPs with a single cloud provider, but when you want your application across many providers or regions, you might want a global DNS solution.  THis demo uses CloudFlare which has a rich API for enabling and re-routing traffic through our deployment lifecycle.
 
-You can see this executed in [config.yml](.circleci/config.yml#L107)
+### Viewing
+And live app visible on http://justademo.online
 
-#### Viewing
-And live app visible on http://blueskygreenbuilds.com
+### Cloud Specific URLS
+Yeah, that'd be cool, TBD.
 
 
 
@@ -35,7 +39,3 @@ This project uses spring boot, so run as you would any other like project to sta
 ```
 mvn spring-boot:run
 ```
-
-
-# Demo
-See [demo-assets](demo-assets)
