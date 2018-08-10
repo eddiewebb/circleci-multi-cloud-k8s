@@ -121,8 +121,7 @@ jobs:
       - run: 
           name: Initialize & Authenticate gcloud SDK
           command: |
-            while read LINE; do eval echo $LINE; done < .circleci/gcp_key.json > /tmp/gcp_key.json
-            #gcloud init --console-only
+            echo "${GCP_KEY_FILE}" | base64 --decode >> /tmp/gcp_key.json
             gcloud auth activate-service-account --key-file /tmp/gcp_key.json
             gcloud config set project research-180616
             gcloud config set compute/zone us-central1-a
