@@ -80,7 +80,7 @@
 				<version>0.9.7</version>
 				<configuration>
 					<to>
-						<image>registry.hub.docker.com/eddiewebb/blueskygreenbuilds-demo:${version}-b${build.number}</image>
+						<image>registry.hub.docker.com/eddiewebb/circleci-k8s-demo:${version}-b${build.number}</image>
 					</to>
 					<container>
 						<jvmFlags>

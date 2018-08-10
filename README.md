@@ -1,6 +1,6 @@
-# Circle CI Kubernetes Demo
+# Circle CI Multi-Cloud Kubernetes Demo
 
-Build, Test and Deploy a simple webapp using CircleCI, Docker, Kubernetes and CloudFlare.  
+Build, Test and Deploy a simple webapp using CircleCI, Docker, Kubernetes and CloudFlare DNS.  
 
 
 ## More Info
@@ -8,7 +8,7 @@ This project repo is the source code companion a series of CircleCI Blog posts. 
 
 
 ##  Testing
-To test simple UI functionality we're using Spring Boot's test starter and Selenium's `WebDriver` interface.  
+To test simple UI functionality we're using Spring Boot's test starter and Selenium's `WebDriver` interface.  If you'd like an isolated example building Docker containers from Java, checkout [CircleCI Jib demo project](https://github.com/eddiewebb/circleci-jib-demo)
 
 ## Containerizing
 To turn our executable jar into a Docker image we're using Jib, a project from Google.

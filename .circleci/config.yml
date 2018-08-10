@@ -9,24 +9,9 @@ workflows:
           filters:
             branches:
               only: master
-      - deploy-docker:
+      - deploy-GCP:
           requires:
             - package-docker
-          filters:
-            branches:
-              only: master
-      - hold:
-          type: approval
-          requires:
-            - dark-deploy
-            - test-ie
-            - test-chrome
-          filters:
-            branches:
-              only: master
-      - live-deploy:
-          requires:
-            - hold
           filters:
             branches:
               only: master
@@ -44,8 +29,8 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - blueskygreenbuilds-mvn-V2-{{ checksum "pom.xml" }}
-            - blueskygreenbuilds-mvn-V2
+            - circleci-k8s-demo-mvn-V2-{{ checksum "pom.xml" }}
+            - circleci-k8s-demo-mvn-V2
 
       - run: mvn dependency:go-offline
       - run:
@@ -57,7 +42,7 @@ jobs:
       - save_cache:
           paths:
             - ~/.m2
-          key: blueskygreenbuilds-mvn-V2-{{ checksum "pom.xml" }}
+          key: circleci-k8s-demo-mvn-V2-{{ checksum "pom.xml" }}
 
       - store_test_results:
           path: target/surefire-reports
@@ -73,8 +58,8 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - blueskygreenbuilds-mvn-V2-{{ checksum "pom.xml" }}
-            - blueskygreenbuilds-mvn-V2
+            - circleci-k8s-demo-mvn-V2-{{ checksum "pom.xml" }}
+            - circleci-k8s-demo-mvn-V2
       - run: mvn dependency:go-offline
       - run: cp .mvn/wrapper/settings.xml ~/.m2/settings.xml
       - run: echo "<settingsSecurity><master>${maven_security_master}</master></settingsSecurity>" > ~/.m2/settings-security.xml
@@ -92,14 +77,14 @@ jobs:
           name: Preserve Docker IMage tag 
           command: |
             MVN_VERSION=$(./mvnw -q -Dexec.executable="echo" -Dexec.args='${project.version}' --non-recursive org.codehaus.mojo:exec-maven-plugin:1.3.1:exec)
-            echo "export DOCKER_IMAGE=eddiewebb/blueskygreenbuilds-demo:${MVN_VERSION}-b${CIRCLE_BUILD_NUM}" > /tmp/docker_image
+            echo "export DOCKER_IMAGE=eddiewebb/circleci-k8s-demo:${MVN_VERSION}-b${CIRCLE_BUILD_NUM}" > /tmp/docker_image
       - persist_to_workspace:
           root: /tmp
           paths:
             - docker_image
 
 
-  deploy-docker:
+  deploy-GCP:
     docker:
       - image: circleci/openjdk:8-jdk-browsers
     working_directory: ~/repo
@@ -125,52 +110,54 @@ jobs:
             gcloud auth activate-service-account --key-file /tmp/gcp_key.json
             gcloud config set project research-180616
             gcloud config set compute/zone us-central1-a
-            gcloud container clusters get-credentials blueskygreenbuilds
+            gcloud container clusters get-credentials circleci-k8s-demo
             source /tmp/docker_image
             echo "Deploying IMage: ${DOCKER_IMAGE}"
-            kubectl run blueskygreenbuilds --image=hub.docker.com/r/${DOCKER_IMAGE} --port 8080 || (echo "Falling back to image update" && kubectl set image deployment/blueskygreenbuilds blueskygreenbuilds=${DOCKER_IMAGE})
-            kubectl rollout status deployment/blueskygreenbuilds
-            kubectl expose deployment blueskygreenbuilds --type=LoadBalancer --port 80 --target-port 8080 || echo "Service already exposed"
+            # First run will create a cluster, if it exists already we'll update the latest image
+            kubectl run circleci-k8s-demo --image=hub.docker.com/r/${DOCKER_IMAGE} --port 8080 || (echo "Falling back to image update" && kubectl set image deployment/circleci-k8s-demo circleci-k8s-demo=${DOCKER_IMAGE})
+            kubectl rollout status deployment/circleci-k8s-demo
+            kubectl expose deployment circleci-k8s-demo --type=LoadBalancer --port 80 --target-port 8080 || echo "Service already exposed"
             kubectl get service
       - run:
-          name: Smoke Test Docker Deploy
+          name: Smoke Test k8s Deploy
           command: |
-            DOCKER_IP=$(kubectl get service | grep blueskygreenbuilds | tr -s " " | cut -d" " -f 4)
-            echo "Testing against IP: ${DOCKER_IP}"
+            CLUSTER_IP=$(kubectl get service | grep circleci-k8s-demo | tr -s " " | cut -d" " -f 4)
+            echo "Testing against IP: ${CLUSTER_IP}"
             sleep 10
-            HTTPCODE=`curl -s -m 5 -o /dev/null -w "%{http_code}" http://${DOCKER_IP}/`
+            HTTPCODE=`curl -s -m 5 -o /dev/null -w "%{http_code}" http://${CLUSTER_IP}/`
             if [ "$HTTPCODE" -ne 200 ];then
-              echo "dark route note available, failing deploy"
+              echo "Application not available, failing deploy"
               exit 1
             fi
-
-
-  live-deploy:
-    docker:
-      - image: circleci/openjdk:8-jdk
-    working_directory: ~/deploy
-    steps:
-      # why rebuild something we already tested, rebuilding invalidates any previous confidence?!
-      - attach_workspace:
-          at: /tmp
 
       - run:
-          name: Re-route live Domain to latest
+          name: Update CloudFlare DNS
           command: |
-            # Verify new version is working on dark URL.
-            HTTPCODE=`curl -s -o /dev/null -w "%{http_code}" http://dark.blueskygreenbuilds.com/`
-            if [ "$HTTPCODE" -ne 200 ];then
-              echo "dark route note available, failing deploy"
-              exit 1
-            fi
-            # Send "real" url to new version
-            cf map-route blueskygreenbuilds-dark blueskygreenbuilds.com -n www
-            sleep 15  # give time to demo round robin
-            # Stop sending traffic to previous version
-            cf unmap-route blueskygreenbuilds blueskygreenbuilds.com -n www
-            # stop previous version
-            cf stop blueskygreenbuilds
-            # delete previous version
-            cf delete blueskygreenbuilds -f
-            # Switch name of "dark" version to claim correct name
-            cf rename blueskygreenbuilds-dark blueskygreenbuilds
+            CLUSTER_IP=$(kubectl get service | grep circleci-k8s-demo | tr -s " " | cut -d" " -f 4)
+            curl -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_DNS_ZONE}/dns_records" \
+               -H "X-Auth-Email: ${CLOUDFLARE_EMAIL}" \
+               -H "X-Auth-Key: ${CLOUDFLARE_API_KEY}" \
+               -H "Content-Type: application/json" \
+               --data '{"type":"A","name":"justademo.online","content":"'${CLUSTER_IP}'","ttl":120,"priority":10,"proxied":false}'
+
+
+  deploy-AWS:
+    docker:
+      - image: circleci/openjdk:8-jdk-browsers
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - attach_workspace: 
+          at: /tmp
+      - run: 
+          name: Install AWS CLI
+          command: |
+            sudo curl -o /usr/local/bin/ecs-cli https://s3.amazonaws.com/amazon-ecs-cli/ecs-cli-linux-amd64-latest
+      - run: 
+          name: Configure AWS CLI for ECS
+          command: |
+            ecs-cli configure profile --access-key $AWS_ACCESS_KEY_ID --secret-key $AWS_SECRET_ACCESS_KEY
+            ecs-cli configure --cluster circleci-demo --default-launch-type launch_type --region us-east-2 --config-name circleci-demo-config
+
+
+
