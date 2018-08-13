@@ -110,18 +110,42 @@ jobs:
             gcloud auth activate-service-account --key-file /tmp/gcp_key.json
             gcloud config set project research-180616
             gcloud config set compute/zone us-central1-a
+
+            # does cluster exist? Create or load credentials
+            if gcloud container clusters describe circleci-k8s-demo > /dev/null ;then
+              echo "Our cluster exists, pull credetials into kubectl"
             gcloud container clusters get-credentials circleci-k8s-demo
+            else
+              echo "Creating cluster for first time"
+              gcloud container clusters create circleci-k8s-demo --num-nodes=2
+            fi
+
+            #push image for first run, or update existing.
             source /tmp/docker_image
             echo "Deploying IMage: ${DOCKER_IMAGE}"
-            # First run will create a cluster, if it exists already we'll update the latest image
-            kubectl run circleci-k8s-demo --image=hub.docker.com/r/${DOCKER_IMAGE} --port 8080 || (echo "Falling back to image update" && kubectl set image deployment/circleci-k8s-demo circleci-k8s-demo=${DOCKER_IMAGE})
+            if kubectl describe deployment/circleci-k8s-demo ;then
+              echo "Updating image on existing deployment" 
+              kubectl set image deployment/circleci-k8s-demo circleci-k8s-demo=${DOCKER_IMAGE}
+            else
+              echo "running first deployment"
+              kubectl run circleci-k8s-demo --image=${DOCKER_IMAGE} --port 8080
+            fi
             kubectl rollout status deployment/circleci-k8s-demo
-            kubectl expose deployment circleci-k8s-demo --type=LoadBalancer --port 80 --target-port 8080 || echo "Service already exposed"
-            kubectl get service
+            
+            if kubectl get service circleci-k8s-demo ;then
+              echo "Service is exposed"
+            else
+              echo "Exposing deployment on Load Balancer"
+              kubectl expose deployment circleci-k8s-demo --type=LoadBalancer --port 80 --target-port 8080
+            fi
+
       - run:
           name: Smoke Test k8s Deploy
           command: |
-            CLUSTER_IP=$(kubectl get service | grep circleci-k8s-demo | tr -s " " | cut -d" " -f 4)
+            # use jq or go templates to get LB IP
+            CLUSTER_IP=$(kubectl get service circleci-k8s-demo -o json | jq -r '.["status"]["loadBalancer"]["ingress"][0]["ip"]')
+            CLUSTER_IP=$(kubectl get service circleci-k8s-demo -o go-template='{{(index .status.loadBalancer.ingress 0).ip}}')
+            
             echo "Testing against IP: ${CLUSTER_IP}"
             sleep 10
             HTTPCODE=`curl -s -m 5 -o /dev/null -w "%{http_code}" http://${CLUSTER_IP}/`
@@ -133,7 +157,7 @@ jobs:
       - run:
           name: Update CloudFlare DNS
           command: |
-            CLUSTER_IP=$(kubectl get service | grep circleci-k8s-demo | tr -s " " | cut -d" " -f 4)
+            CLUSTER_IP=$(kubectl get service circleci-k8s-demo -o go-template='{{(index .status.loadBalancer.ingress 0).ip}}')
             curl -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_DNS_ZONE}/dns_records" \
                -H "X-Auth-Email: ${CLOUDFLARE_EMAIL}" \
                -H "X-Auth-Key: ${CLOUDFLARE_API_KEY}" \
