@@ -15,6 +15,12 @@ workflows:
           filters:
             branches:
               only: master
+      - deploy-AWS:
+          requires:
+            - package-docker
+          filters:
+            branches:
+              only: master
 
 
 
@@ -113,8 +119,8 @@ jobs:
 
             # does cluster exist? Create or load credentials
             if gcloud container clusters describe circleci-k8s-demo > /dev/null ;then
-              echo "Our cluster exists, pull credetials into kubectl"
-            gcloud container clusters get-credentials circleci-k8s-demo
+              echo "Our cluster exists, pull credentials into kubectl"
+              gcloud container clusters get-credentials circleci-k8s-demo
             else
               echo "Creating cluster for first time"
               gcloud container clusters create circleci-k8s-demo --num-nodes=2
@@ -163,6 +169,7 @@ jobs:
                -H "X-Auth-Key: ${CLOUDFLARE_API_KEY}" \
                -H "Content-Type: application/json" \
                --data '{"type":"A","name":"justademo.online","content":"'${CLUSTER_IP}'","ttl":120,"priority":10,"proxied":true}'
+      - run:    
           name: Update CloudFlare Proxy to Force SSL
           command: |
             curl -X PATCH "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_DNS_ZONE}/settings/always_use_https" \
@@ -173,21 +180,55 @@ jobs:
 
   deploy-AWS:
     docker:
-      - image: circleci/openjdk:8-jdk-browsers
+      - image: circleci/python:2
     working_directory: ~/repo
     steps:
       - checkout
       - attach_workspace: 
           at: /tmp
       - run: 
-          name: Install AWS CLI
+          name: Install kops 
           command: |
-            sudo curl -o /usr/local/bin/ecs-cli https://s3.amazonaws.com/amazon-ecs-cli/ecs-cli-linux-amd64-latest
+            wget -O kops https://github.com/kubernetes/kops/releases/download/$(curl -s https://api.github.com/repos/kubernetes/kops/releases/latest | grep tag_name | cut -d '"' -f 4)/kops-linux-amd64
+            chmod +x ./kops
+            sudo mv ./kubectl /usr/local/bin/kubectl
       - run: 
-          name: Configure AWS CLI for ECS
+          name: Install kubectl
           command: |
-            ecs-cli configure profile --access-key $AWS_ACCESS_KEY_ID --secret-key $AWS_SECRET_ACCESS_KEY
-            ecs-cli configure --cluster circleci-demo --default-launch-type launch_type --region us-east-2 --config-name circleci-demo-config
+            wget -O kubectl https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
+            chmod +x ./kubectl
+            sudo mv ./kubectl /usr/local/bin/kubectl
+      - run: 
+          name: Install aws cli
+          command: |
+            sudo pip install awscli
+            echo "export AWS_REGION=us-east-2" >> $BASH_ENV
+      - run: 
+          name: Create CLuster
+          command: |
 
+            if kops describe circleci-k8s-demo; then
+              echo "Cluster exists, update it"
+            else
+              echo "Creating cluster" 
+              kops create cluster \
+                  --node-count=2 \
+                  --node-size=t2.medium \
+                  --zones=us-east-2a \
+                  --name=circleci-k8s-demo
+                  kops update cluster --name circleci-k8s-demo --yes
+            fi
+
+
+      - run:
+          name: Update CloudFlare DNS with Proxied Service
+          command: |
+            CLUSTER_IP=$(kubectl get service circleci-k8s-demo -o go-template='{{(index .status.loadBalancer.ingress 0).ip}}')
+            curl -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_DNS_ZONE}/dns_records" \
+               -H "X-Auth-Email: ${CLOUDFLARE_EMAIL}" \
+               -H "X-Auth-Key: ${CLOUDFLARE_API_KEY}" \
+               -H "Content-Type: application/json" \
+               --data '{"type":"A","name":"justademo.online","content":"'${CLUSTER_IP}'","ttl":120,"priority":10,"proxied":true}'
+      
 
 
