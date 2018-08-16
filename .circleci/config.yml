@@ -108,7 +108,7 @@ jobs:
           command: |
             echo "${GCP_KEY_FILE}" | base64 --decode >> /tmp/gcp_key.json
             gcloud auth activate-service-account --key-file /tmp/gcp_key.json
-            gcloud config set project research-180616
+            gcloud config set project ${GCP_ACCOUNT_ID}
             gcloud config set compute/zone us-central1-a
 
             # does cluster exist? Create or load credentials
@@ -155,15 +155,21 @@ jobs:
             fi
 
       - run:
-          name: Update CloudFlare DNS
+          name: Update CloudFlare DNS with Proxied Service
           command: |
             CLUSTER_IP=$(kubectl get service circleci-k8s-demo -o go-template='{{(index .status.loadBalancer.ingress 0).ip}}')
             curl -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_DNS_ZONE}/dns_records" \
                -H "X-Auth-Email: ${CLOUDFLARE_EMAIL}" \
                -H "X-Auth-Key: ${CLOUDFLARE_API_KEY}" \
                -H "Content-Type: application/json" \
-               --data '{"type":"A","name":"justademo.online","content":"'${CLUSTER_IP}'","ttl":120,"priority":10,"proxied":false}'
-
+               --data '{"type":"A","name":"justademo.online","content":"'${CLUSTER_IP}'","ttl":120,"priority":10,"proxied":true}'
+          name: Update CloudFlare Proxy to Force SSL
+          command: |
+            curl -X PATCH "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_DNS_ZONE}/settings/always_use_https" \
+                 -H "X-Auth-Email: ${CLOUDFLARE_EMAIL}" \
+                 -H "X-Auth-Key: ${CLOUDFLARE_API_KEY}" \
+                 -H "Content-Type: application/json" \
+                 --data '{"value":"on"}'
 
   deploy-AWS:
     docker:
