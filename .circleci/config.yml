@@ -191,7 +191,9 @@ jobs:
           command: |
             wget -O kops https://github.com/kubernetes/kops/releases/download/$(curl -s https://api.github.com/repos/kubernetes/kops/releases/latest | grep tag_name | cut -d '"' -f 4)/kops-linux-amd64
             chmod +x ./kops
-            sudo mv ./kubectl /usr/local/bin/kubectl
+            sudo mv ./kops /usr/local/bin/kops
+            echo "export KOPS_CLUSTER_NAME=k8saws.justademo.online" >> $BASH_ENV
+            echo "export KOPS_STATE_STORE=s3://${S3_BUCKET_NAME}" >> $BASH_ENV
       - run: 
           name: Install kubectl
           command: |
@@ -207,28 +209,61 @@ jobs:
           name: Create CLuster
           command: |
 
-            if kops describe circleci-k8s-demo; then
-              echo "Cluster exists, update it"
+            if kops get cluster --name ${KOPS_CLUSTER_NAME}; then
+              echo "Cluster exists, skipping to update"
             else
               echo "Creating cluster" 
+              echo "${KOPS_PUBLIC_KEY}" > ~/.ssh/kops_id.pub
               kops create cluster \
                   --node-count=2 \
                   --node-size=t2.medium \
                   --zones=us-east-2a \
-                  --name=circleci-k8s-demo
-                  kops update cluster --name circleci-k8s-demo --yes
+                  --name=${KOPS_CLUSTER_NAME}
+
+              kops create secret --name ${KOPS_CLUSTER_NAME} sshpublickey admin -i ~/.ssh/kops_id.pub
+              kops update cluster --name ${KOPS_CLUSTER_NAME} --yes
+            fi
+            let attempts=0
+            until kops validate cluster; do
+              echo "Cluster not ready yet"
+              # wait up to 10 minutes for helthy cluster
+              if [ $attempts -lt 10 ];then
+                echo "Cluster not ready"
+                sleep 60
+                let attempts=attempts+1
+              else
+                echo "Attempts failed"
+                #exit 1
+              fi
+            done
+
+
+            #push image for first run, or update existing.
+            source /tmp/docker_image
+            echo "Deploying IMage: ${DOCKER_IMAGE}"
+            if kubectl describe deployment/circleci-k8s-demo ;then
+              echo "Updating image on existing deployment" 
+              kubectl set image deployment/circleci-k8s-demo circleci-k8s-demo=${DOCKER_IMAGE}
+            else
+              echo "running first deployment"
+              kubectl run circleci-k8s-demo --image=${DOCKER_IMAGE} --port 8080
+            fi
+
+            # block until deployment is running
+            kubectl rollout status deployment/circleci-k8s-demo
+
+            if kubectl get service circleci-k8s-demo ;then
+              echo "Service is exposed"
+            else
+              echo "Exposing deployment on Load Balancer"
+              kubectl expose deployment circleci-k8s-demo --type=LoadBalancer
             fi
 
 
       - run:
-          name: Update CloudFlare DNS with Proxied Service
+          name: Update CloudFlare Load Balancer
           command: |
-            CLUSTER_IP=$(kubectl get service circleci-k8s-demo -o go-template='{{(index .status.loadBalancer.ingress 0).ip}}')
-            curl -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_DNS_ZONE}/dns_records" \
-               -H "X-Auth-Email: ${CLOUDFLARE_EMAIL}" \
-               -H "X-Auth-Key: ${CLOUDFLARE_API_KEY}" \
-               -H "Content-Type: application/json" \
-               --data '{"type":"A","name":"justademo.online","content":"'${CLUSTER_IP}'","ttl":120,"priority":10,"proxied":true}'
-      
+            CLUSTER_HOSTNAME=$(kubectl get service circleci-k8s-demo -o go-template='{{(index .status.loadBalancer.ingress 0).hostname}}')
+            echo "${CLUSTER_HOSTNAME}"
 
 
