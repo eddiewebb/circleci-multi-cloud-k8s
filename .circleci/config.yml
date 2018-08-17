@@ -21,6 +21,13 @@ workflows:
           filters:
             branches:
               only: master
+      - cloudflare:
+          requires:
+            - deploy-AWS
+            - deploy-GCP
+          filters:
+            branches:
+              only: master
 
 
 
@@ -95,7 +102,6 @@ jobs:
       - image: circleci/openjdk:8-jdk-browsers
     working_directory: ~/repo
     steps:
-      - checkout
       - attach_workspace: 
           at: /tmp
       - run: 
@@ -151,7 +157,6 @@ jobs:
             # use jq or go templates to get LB IP
             CLUSTER_IP=$(kubectl get service circleci-k8s-demo -o json | jq -r '.["status"]["loadBalancer"]["ingress"][0]["ip"]')
             CLUSTER_IP=$(kubectl get service circleci-k8s-demo -o go-template='{{(index .status.loadBalancer.ingress 0).ip}}')
-            
             echo "Testing against IP: ${CLUSTER_IP}"
             sleep 10
             HTTPCODE=`curl -s -m 5 -o /dev/null -w "%{http_code}" http://${CLUSTER_IP}/`
@@ -168,7 +173,7 @@ jobs:
                -H "X-Auth-Email: ${CLOUDFLARE_EMAIL}" \
                -H "X-Auth-Key: ${CLOUDFLARE_API_KEY}" \
                -H "Content-Type: application/json" \
-               --data '{"type":"A","name":"justademo.online","content":"'${CLUSTER_IP}'","ttl":120,"priority":10,"proxied":true}'
+               --data '{"type":"A","name":"${K8S_DOMAIN_GCP}","content":"'${CLUSTER_IP}'","ttl":120,"priority":10,"proxied":true}'
       - run:    
           name: Update CloudFlare Proxy to Force SSL
           command: |
@@ -183,7 +188,6 @@ jobs:
       - image: circleci/python:2
     working_directory: ~/repo
     steps:
-      - checkout
       - attach_workspace: 
           at: /tmp
       - run: 
@@ -192,7 +196,7 @@ jobs:
             wget -O kops https://github.com/kubernetes/kops/releases/download/$(curl -s https://api.github.com/repos/kubernetes/kops/releases/latest | grep tag_name | cut -d '"' -f 4)/kops-linux-amd64
             chmod +x ./kops
             sudo mv ./kops /usr/local/bin/kops
-            echo "export KOPS_CLUSTER_NAME=k8saws.justademo.online" >> $BASH_ENV
+            echo "export KOPS_CLUSTER_NAME=${K8S_DOMAIN_AWS}" >> $BASH_ENV
             echo "export KOPS_STATE_STORE=s3://${S3_BUCKET_NAME}" >> $BASH_ENV
       - run: 
           name: Install kubectl
@@ -259,10 +263,16 @@ jobs:
             fi
 
 
+ cloudflare:
+    docker:
+      - image: circleci/python:2
+    working_directory: ~/repo
+    steps:
       - run:
           name: Update CloudFlare Load Balancer
           command: |
-            CLUSTER_HOSTNAME=$(kubectl get service circleci-k8s-demo -o go-template='{{(index .status.loadBalancer.ingress 0).hostname}}')
-            echo "${CLUSTER_HOSTNAME}"
-
+            # create or verify LB exists on cname
+            # Create or update origin pool for GCP using ${K8S_DOMAIN_GCP}
+            # Create or update origin pool for AWS using ${K8S_DOMAIN_AWS}
+            echo "Waiting for premium support."
 
