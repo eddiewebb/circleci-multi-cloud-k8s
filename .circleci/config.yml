@@ -174,14 +174,6 @@ jobs:
                -H "X-Auth-Key: ${CLOUDFLARE_API_KEY}" \
                -H "Content-Type: application/json" \
                --data '{"type":"A","name":"${K8S_DOMAIN_GCP}","content":"'${CLUSTER_IP}'","ttl":120,"priority":10,"proxied":true}'
-      - run:    
-          name: Update CloudFlare Proxy to Force SSL
-          command: |
-            curl -X PATCH "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_DNS_ZONE}/settings/always_use_https" \
-                 -H "X-Auth-Email: ${CLOUDFLARE_EMAIL}" \
-                 -H "X-Auth-Key: ${CLOUDFLARE_API_KEY}" \
-                 -H "Content-Type: application/json" \
-                 --data '{"value":"on"}'
 
   deploy-AWS:
     docker:
@@ -263,7 +255,7 @@ jobs:
             fi
 
 
- cloudflare:
+  cloudflare:
     docker:
       - image: circleci/python:2
     working_directory: ~/repo
@@ -275,4 +267,13 @@ jobs:
             # Create or update origin pool for GCP using ${K8S_DOMAIN_GCP}
             # Create or update origin pool for AWS using ${K8S_DOMAIN_AWS}
             echo "Waiting for premium support."
+      - run:    
+          name: Update CloudFlare Proxy to Force SSL
+          command: |
+            curl -X PATCH "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_DNS_ZONE}/settings/always_use_https" \
+                 -H "X-Auth-Email: ${CLOUDFLARE_EMAIL}" \
+                 -H "X-Auth-Key: ${CLOUDFLARE_API_KEY}" \
+                 -H "Content-Type: application/json" \
+                 --data '{"value":"on"}'
+
 
