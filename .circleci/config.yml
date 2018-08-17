@@ -208,8 +208,7 @@ jobs:
       - run: 
           name: Create CLuster
           command: |
-
-            if kops get cluster --name ${KOPS_CLUSTER_NAME}; then
+            if kops get cluster --name ${KOPS_CLUSTER_NAME} ; then
               echo "Cluster exists, loading configuration into kubectl"
               kops export kubecfg --name ${KOPS_CLUSTER_NAME}
             else
@@ -224,8 +223,8 @@ jobs:
               kops create secret --name ${KOPS_CLUSTER_NAME} sshpublickey admin -i ~/.ssh/kops_id.pub
               kops update cluster --name ${KOPS_CLUSTER_NAME} --yes
             fi
-            let attempts=0
-            until kops validate cluster; do
+            attempts=0
+            until kops validate cluster ; do
               # wait up to 10 minutes for helthy cluster
               if [ $attempts -lt 10 ];then
                 echo "Cluster not ready"
