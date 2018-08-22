@@ -241,7 +241,7 @@ jobs:
               kubectl set image deployment/circleci-k8s-demo circleci-k8s-demo=${DOCKER_IMAGE}
             else
               echo "running first deployment"
-              kubectl run circleci-k8s-demo --image=${DOCKER_IMAGE} --port 8080
+              kubectl run circleci-k8s-demo --image=${DOCKER_IMAGE} --port 80
             fi
 
             # block until deployment is running
