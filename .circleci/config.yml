@@ -159,7 +159,7 @@ jobs:
             fi
 
       - run:
-          name: Update CloudFlare DNS with Proxied Service
+          name: Update CloudFlare DNS with Cluster IP
           command: |
             # in our GCP example we leave our CloudFlare load balancer pointing to a sub-domain (k8sgcp.justademo.online)
             # So anytime we deploy, we use their DNS service to change that record to the latest, without needing to update the Load Balancer pools
@@ -169,6 +169,7 @@ jobs:
                 -H "X-Auth-Email: ${CLOUDFLARE_EMAIL}" \
                 -H "X-Auth-Key: ${CLOUDFLARE_API_KEY}" \
                 -H "Content-Type: application/json"   | jq -r '.result[].id') )
+
             for record in ${existing_records[@]}; do
                curl -X DELETE "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_DNS_ZONE}/dns_records/${record}" \
                -H "X-Auth-Email: ${CLOUDFLARE_EMAIL}" \
