@@ -17,13 +17,6 @@ workflows:
               only: master
       - deploy-AWS:
           requires:
-            - package-docker
-          filters:
-            branches:
-              only: master
-      - cloudflare:
-          requires:
-            - deploy-AWS
             - deploy-GCP
           filters:
             branches:
@@ -168,12 +161,32 @@ jobs:
       - run:
           name: Update CloudFlare DNS with Proxied Service
           command: |
+            # in our GCP example we leave our CloudFlare load balancer pointing to a sub-domain (k8sgcp.justademo.online)
+            # So anytime we deploy, we use their DNS service to change that record to the latest, without needing to update the Load Balancer pools
+
+            # purge any existing records for our GCP subdomain.
+            existing_records=( $(curl -X GET "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_DNS_ZONE}/dns_records?type=A&${K8S_DOMAIN_GCP}" \
+                -H "X-Auth-Email: ${CLOUDFLARE_EMAIL}" \
+                -H "X-Auth-Key: ${CLOUDFLARE_API_KEY}" \
+                -H "Content-Type: application/json"   | jq -r '.result[].id') )
+            for record in ${existing_records[@]}; do
+               curl -X DELETE "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_DNS_ZONE}/dns_records/${record}" \
+               -H "X-Auth-Email: ${CLOUDFLARE_EMAIL}" \
+               -H "X-Auth-Key: ${CLOUDFLARE_API_KEY}" \
+               -H "Content-Type: application/json"
+            done
+
+            # Create new record with latest cluster IP.
             CLUSTER_IP=$(kubectl get service circleci-k8s-demo -o go-template='{{(index .status.loadBalancer.ingress 0).ip}}')
             curl -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_DNS_ZONE}/dns_records" \
                -H "X-Auth-Email: ${CLOUDFLARE_EMAIL}" \
                -H "X-Auth-Key: ${CLOUDFLARE_API_KEY}" \
                -H "Content-Type: application/json" \
-               --data '{"type":"A","name":"'${K8S_DOMAIN_GCP}'","content":"'${CLUSTER_IP}'","ttl":120,"priority":10,"proxied":true}'
+               --data '{"type":"A","name":"'${K8S_DOMAIN_GCP}'","content":"'${CLUSTER_IP}'","ttl":120,"priority":10,"proxied":false}'
+      
+
+
+
 
   deploy-AWS:
     docker:
@@ -241,7 +254,7 @@ jobs:
               kubectl set image deployment/circleci-k8s-demo circleci-k8s-demo=${DOCKER_IMAGE}
             else
               echo "running first deployment"
-              kubectl run circleci-k8s-demo --image=${DOCKER_IMAGE} --port 80
+              kubectl run circleci-k8s-demo --image=${DOCKER_IMAGE} --port 8080
             fi
 
             # block until deployment is running
@@ -251,8 +264,34 @@ jobs:
               echo "Service is exposed"
             else
               echo "Exposing deployment on Load Balancer"
-              kubectl expose deployment circleci-k8s-demo --type=LoadBalancer
+              kubectl expose deployment circleci-k8s-demo --type=LoadBalancer --port 80 --target-port 8080
             fi
+      - run: 
+          name: Updayte CloudFlare Load Balancer with AWS ELB
+          command: |
+            # unlike our GCP example that used CloudFlare DNS, our AWS example uses AWS DNS/ELBs 
+            # So we'll grab the ELB FQDN, and update our CloudFlare Load Balancer pool.
+
+            # It may take AWS a minute to instantiate and route the ELB
+            ELB_FQDN=""
+            while [ -z $ELB_FQDN ]; do
+              echo "Waiting for end point..."
+              ELB_FQDN=$(kubectl get service circleci-k8s-demo -o go-template='{{(index .status.loadBalancer.ingress 0).hostname}}')
+              [ -z "$ELB_FQDN" ] && sleep 10
+            done
+            echo "Setting CloudFLare origin pool to ELB: $ELB_FQDN"
+
+            # Once ready, add to our origin pool
+            curl -X PUT "https://api.cloudflare.com/client/v4/user/load_balancers/pools/891e99bce3e5955ced3bfab5714ad620" \
+                -H "X-Auth-Email: ${CLOUDFLARE_EMAIL}" \
+                -H "X-Auth-Key: ${CLOUDFLARE_API_KEY}" \
+                -H "Content-Type: application/json" \
+                --data '{"name":"AWS","origins":[{"name":"cluster-1","address":"'${ELB_FQDN}'","enabled":true,"weight":1}]}'
+      
+
+
+
+
 
 
   cloudflare:
