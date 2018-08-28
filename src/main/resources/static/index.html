@@ -5,11 +5,11 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
-    <meta name="description" content="A free sample demo project using CircleCI and CLoud Foundry  blue/green deployments">
-    <meta name="author" content="Eddie Webb">
+    <meta name="description" content="A free demo project using CircleCI and Kubernetes as a multi-cloud deployment">
+    <meta name="author" content="Eddie Webb @ CircleCI.com">
     <link rel="icon" href="/favicon.png">
 
-    <title>Blue Sky, Green Builds</title>
+    <title>CircleCI Multi-Cloud Demo</title>
 
     <!-- Bootstrap core CSS -->
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
@@ -42,9 +42,9 @@
             <img class="first-slide" src="data:image/gif;base64,R0lGODlhAQABAIAAAHd3dwAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==" alt="First slide">
             <div class="container">
                 <div class="carousel-caption">
-                    <h1>Happy Teams, Quality Software</h1>
-                    <p>Our teams love what they do, and build with the best quality.</p>
-                    <p><a id="car-btn-1" class="btn btn-lg btn-primary" href="/about" role="button">Start Building!</a></p>
+                    <h1>Delivered by CircleCI</h1>
+                    <p>This is a sample wesbite deployed via CircleCI as part of our blog series on supporting multi-cloud deployments.</p>
+                    <p><a id="car-btn-1" class="btn btn-lg btn-primary" href="https://circleci.com/product/" role="button">Learn More about CircleCI</a></p>
                 </div>
             </div>
         </div>
@@ -52,9 +52,9 @@
             <img class="second-slide" src="data:image/gif;base64,R0lGODlhAQABAIAAAHd3dwAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==" alt="Second slide">
             <div class="container">
                 <div class="carousel-caption">
-                    <h1>Faster Turnaround</h1>
-                    <p>Nobody can meet our combination of speed and quality thanks to our highly disciplined software delivery practices.</p>
-                    <p><a class="btn btn-lg btn-primary" href="/about" role="button">Learn more</a></p>
+                    <h1>Containers by Jib!</h1>
+                    <p>This project uses Jib, a project by Google that makes it brilliantly simple to package Java applications into Docker containers.</p>
+                    <p><a class="btn btn-lg btn-primary" href="https://cloudplatform.googleblog.com/2018/07/introducing-jib-build-java-docker-images-better.html" role="button">Learn about Jib!</a></p>
                 </div>
             </div>
         </div>
@@ -62,9 +62,9 @@
             <img class="third-slide" src="data:image/gif;base64,R0lGODlhAQABAIAAAHd3dwAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==" alt="Third slide">
             <div class="container">
                 <div class="carousel-caption">
-                    <h1>Consulting and Dojos</h1>
-                    <p>We can pair with your engineers to share best practices and enable frictionless delivery in your company.</p>
-                    <p><a class="btn btn-lg btn-primary" href="/about" role="button">Ask How!</a></p>
+                    <h1>Using all the clouds!</h1>
+                    <p>We're running this site as multiple isolated Kubernetes deployments in GCP and AWS, with a global load balancer provided by CloudFlare.</p>
+                    <p><a class="btn btn-lg btn-primary" href="https://github.com/eddiewebb/circleci-multi-cloud-k8s" role="button">See Configuration!</a></p>
                 </div>
             </div>
         </div>
@@ -91,19 +91,19 @@
         <div class="col-lg-4">
             <img class="img-circle" src="/images/superior.png" alt="Generic placeholder image" width="140" height="140">
             <h2>Better</h2>
-            <p>Donec sed odio dui. Etiam porta sem malesuada magna mollis euismod. Nullam id dolor id nibh ultricies vehicula ut id elit. Morbi leo risus, porta ac consectetur ac, vestibulum at eros. Praesent commodo cursus magna.</p>
-            <p><a class="btn btn-default" href="/about" role="button">View details &raquo;</a></p>
+            <p>CircleCI's workflows are 100% configuration-as-code and utlimately flexible to support your DevOps journey.</p>
+            <p><a class="btn btn-default" href="https://circleci.com/product" role="button">View details &raquo;</a></p>
         </div><!-- /.col-lg-4 -->
         <div class="col-lg-4">
             <img class="img-circle" src="/images/competitive.png" alt="Generic placeholder image" width="140" height="140">
             <h2>Faster</h2>
-            <p>Duis mollis, est non commodo luctus, nisi erat porttitor ligula, eget lacinia odio sem nec elit. Cras mattis consectetur purus sit amet fermentum. Fusce dapibus, tellus ac cursus commodo, tortor mauris condimentum nibh.</p>
-            <p><a class="btn btn-default" href="/about" role="button">View details &raquo;</a></p>
+            <p>Tools like Jib make it simple and fast to containerize your Java workloads.</p>
+            <p><a class="btn btn-default" href="https://cloudplatform.googleblog.com/2018/07/introducing-jib-build-java-docker-images-better.html" role="button">View details &raquo;</a></p>
         </div><!-- /.col-lg-4 -->
         <div class="col-lg-4">
             <img class="img-circle" src="/images/commercial.png" alt="Generic placeholder image" width="140" height="140">
             <h2>Cheaper</h2>
-            <p>Donec sed odio dui. Cras justo odio, dapibus ac facilisis in, egestas eget quam. Vestibulum id ligula porta felis euismod semper. Fusce dapibus, tellus ac cursus commodo, tortor mauris condimentum nibh, ut fermentum massa justo sit amet risus.</p>
+            <p>Avoid lock-in with any single Cloud provider by focusing on the level of abstraction against open APIs and platforms that give you portability and leverage.</p>
             <p><a class="btn btn-default" href="/about" role="button">View details &raquo;</a></p>
         </div><!-- /.col-lg-4 -->
     </div><!-- /.row -->
@@ -114,7 +114,7 @@
     <!-- FOOTER -->
     <footer>
         <p class="pull-right"><a href="#">Back to top</a></p>
-        <p>&copy; 2016 Blue Sky, Green Builds, Inc. &middot; <a href="/about">Privacy</a> &middot; <a href="#">Terms</a> &middot; <a href="/build-info">Build Info</a></p>
+        <p>&copy; 2018 CircleCI &middot; <a href="/build-info">Build Info</a> &middot;  <a href="https://github.com/eddiewebb/circleci-multi-cloud-k8s">Github Repo</a></p>
         <p>Icons from the Noun Project: superior, competitive & commercial by Nithinan Tatah</p>
     </footer>
 
